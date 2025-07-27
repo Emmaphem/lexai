@@ -1,30 +1,67 @@
+import Stripe from 'stripe';
 
-import Stripe from 'stripe'
-import { NextResponse } from 'next/server'
+export async function POST(request: Request) {
+  try {
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-06-30.basil'
-})
+    if (!stripeSecretKey) {
+      return new Response(
+        JSON.stringify({ error: 'Stripe is not configured' }), 
+        { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
 
-export async function POST() {
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ['card'],
-    mode: 'payment',
-    line_items: [
-      {
-        price_data: {
-          currency: 'gbp',
-          product_data: {
-            name: 'Legal Document Analysis',
-          },
-          unit_amount: 500,
+    // Initialize Stripe only when the function is called
+    const stripe = new Stripe(stripeSecretKey);
+
+    // Get request body
+    const body = await request.json();
+    const { priceId, successUrl, cancelUrl } = body;
+
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
         },
-        quantity: 1,
-      }
-    ],
-    success_url: 'https://lexai.vercel.app/success',
-    cancel_url: 'https://lexai.vercel.app'
-  })
+      ],
+      success_url: successUrl || `${process.env.NEXT_PUBLIC_URL}/success`,
+      cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_URL}/cancel`,
+    });
 
-  return NextResponse.json({ url: session.url })
+    return new Response(
+      JSON.stringify({ sessionId: session.id, url: session.url }), 
+      { 
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+
+  } catch (error) {
+    console.error('Stripe checkout error:', error);
+    return new Response(
+      JSON.stringify({ error: 'Payment processing failed' }), 
+      { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
+}
+
+// Handle GET requests (optional - for testing)
+export async function GET() {
+  return new Response(
+    JSON.stringify({ message: 'Checkout endpoint is working' }), 
+    { 
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    }
+  );
 }
